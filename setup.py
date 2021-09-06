@@ -101,6 +101,7 @@ setup(
         "cloud": ["boto3"],
         "azure": ["azure-identity", "azure-storage-blob"],
         "snappy": ["python-snappy >= 0.6.0"],
+        "google": ["google-cloud-storage"],
     },
     platforms=["Linux", "Mac OS X"],
     classifiers=[
