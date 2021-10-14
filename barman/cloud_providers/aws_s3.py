@@ -21,7 +21,7 @@ import shutil
 from io import RawIOBase
 
 from barman.clients.cloud_compression import decompress_to_file
-from barman.cloud import CloudInterface, CloudProviderError, DecompressingStreamingIO
+from barman.cloud import CloudInterface, CloudProviderError, DecompressingStreamingIO, DEFAULT_DELIMITER
 
 
 try:
@@ -203,7 +203,7 @@ class S3CloudInterface(CloudInterface):
             }
         self.s3.Bucket(self.bucket_name).create(**create_bucket_config)
 
-    def list_bucket(self, prefix="", delimiter="/"):
+    def list_bucket(self, prefix="", delimiter=DEFAULT_DELIMITER):
         """
         List bucket content in a directory manner
 
