@@ -91,11 +91,16 @@ def _make_azure_cloud_interface(config, cloud_interface_kwargs):
 
     return AzureCloudInterface(**cloud_interface_kwargs)
 
+def _make_google_cloud_interface(config, cloud_interface_kwargs):
+    from barman.cloud_providers.google_cloud_storage import GoogleCloudInterface
+    return GoogleCloudInterface(**cloud_interface_kwargs)
+
 
 def get_cloud_interface(config):
     """
-    Create a CloudInterface for the specified cloud_provider
+    Factory function that creates CloudInterface for the specified cloud_provider
 
+    :param: argparse.Namespace config
     :returns: A CloudInterface for the specified cloud_provider
     :rtype: CloudInterface
     """
@@ -108,6 +113,9 @@ def get_cloud_interface(config):
         return _make_s3_cloud_interface(config, cloud_interface_kwargs)
     elif config.cloud_provider == "azure-blob-storage":
         return _make_azure_cloud_interface(config, cloud_interface_kwargs)
+    elif config.cloud_provider == "google-cloud-storage":
+
+        return _make_google_cloud_interface(config, cloud_interface_kwargs)
     else:
         raise CloudProviderUnsupported(
             "Unsupported cloud provider: %s" % config.cloud_provider
