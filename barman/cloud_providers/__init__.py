@@ -91,8 +91,10 @@ def _make_azure_cloud_interface(config, cloud_interface_kwargs):
 
     return AzureCloudInterface(**cloud_interface_kwargs)
 
+
 def _make_google_cloud_interface(config, cloud_interface_kwargs):
     from barman.cloud_providers.google_cloud_storage import GoogleCloudInterface
+
     return GoogleCloudInterface(**cloud_interface_kwargs)
 
 
