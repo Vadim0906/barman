@@ -57,7 +57,7 @@ class GoogleCloudInterface(CloudInterface):
     # MAX_ARCHIVE_SIZE - so we set a maximum of 1TB per file
     MAX_ARCHIVE_SIZE = 1 << 40
 
-    def __init__(self, url, jobs=1, encryption_scope=None, profile_name=None):
+    def __init__(self, url, jobs=1, encryption_scope=None, profile_name=None, tags=None):
         """
         Create a new Google cloud Storage interface given the supplied account url
 
@@ -71,6 +71,7 @@ class GoogleCloudInterface(CloudInterface):
         super(GoogleCloudInterface, self).__init__(
             url=url,
             jobs=jobs,
+            tags=tags,
         )
         self.encryption_scope = encryption_scope
 
@@ -197,15 +198,20 @@ class GoogleCloudInterface(CloudInterface):
         # todo: maybe open with rb ?
         return blob.open("r")
 
-    def upload_fileobj(self, fileobj, key):
+    def upload_fileobj(self, fileobj, key, override_tags=None):
         """
         Synchronously upload the content of a file-like object to a cloud key
 
         :param fileobj IOBase: File-like object to upload
         :param str key: The key to identify the uploaded object
+        :param List[tuple] override_tags: List of tags as k,v tuples to be added to the
+          uploaded object
         """
+        tags = override_tags or self.tags
         logging.info("upload_fileobj to {}".format(key))
         blob = self.container_client.blob(key)
+        if tags is not None:
+            blob.metadata = dict(tags)
         logging.info("blob initiated")
         try:
             blob.upload_from_file(fileobj)
