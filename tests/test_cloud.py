@@ -36,6 +36,7 @@ from mock.mock import MagicMock
 import pytest
 import snappy
 from unittest import TestCase
+from unittest.mock import call
 from boto3.exceptions import Boto3Error
 from botocore.exceptions import ClientError, EndpointConnectionError
 
@@ -2113,27 +2114,30 @@ class TestGoogleCloudInterface(TestCase):
     #     os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "connection_string"}
     # )
     # @mock.patch("barman.cloud_providers.azure_blob_storage.BlobServiceClient")
-    # def test_upload_part(self, blob_service_mock):
-    #     """
-    #     Tests the upload of a single block in Azure
-    #     """
-    #     cloud_interface = GoogleCloudInterface(
-    #         "https://storageaccount.blob.core.windows.net/container/path/to/blob"
-    #     )
-    #     blob_service_client_mock = blob_service_mock.from_connection_string.return_value
-    #     container_client_mock = (
-    #         blob_service_client_mock.get_container_client.return_value
-    #     )
-    #     blob_client_mock = container_client_mock.get_blob_client.return_value
-    #
-    #     mock_body = mock.MagicMock()
-    #     mock_key = "path/to/blob"
-    #     cloud_interface._upload_part({}, mock_key, mock_body, 1)
-    #
-    #     # A blob client is created for the key and stage_block is called with
-    #     # the mock_body and a block_id generated from the part number
-    #     container_client_mock.get_blob_client.assert_called_once_with(mock_key)
-    #     blob_client_mock.stage_block.assert_called_once_with("00001", mock_body)
+    @mock.patch("barman.cloud_providers.google_cloud_storage.storage.Client")
+    def test_upload_part(self, gcs_client_mock):
+        """
+        Tests the upload of a single block in Google
+        At that time there is no real multipart and file are sent entirely in one  bloc
+        """
+        mock_key = "path/to/blob"
+        mock_body = mock.MagicMock()
+        mock_blob = mock.MagicMock()
+
+        service_client_mock = gcs_client_mock.return_value
+        container_client_mock = service_client_mock.bucket.return_value
+        container_client_mock.blob.return_value = mock_blob
+
+        # Create Object and call upload_filobj
+        cloud_interface = GoogleCloudInterface(
+            "https://console.cloud.google.com/storage/browser/barman-test/test/path/to/my/"
+        )
+        cloud_interface._upload_part({}, mock_key, mock_body, 1)
+
+        # Validate behavior
+        container_client_mock.blob.assert_called_once_with(mock_key)
+        mock_blob.upload_from_file.assert_called_once_with(mock_body)
+
 
     # @mock.patch.dict(
     #     os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "connection_string"}
@@ -2277,6 +2281,40 @@ class TestGoogleCloudInterface(TestCase):
     #         [], encryption_scope=encryption_scope
     #     )
     #     blob_client_mock.delete_blob.assert_called_once_with()
+
+    # @mock.patch.dict(
+    #     os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "connection_string"}
+    # )
+    @mock.patch("barman.cloud_providers.google_cloud_storage.storage.Client")
+    def test_delete_objects(self, gcs_client_mock):
+
+
+        mock_blob1 = mock.MagicMock()
+        mock_blob2 = mock.MagicMock()
+
+        service_client_mock = gcs_client_mock.return_value
+        container_client_mock = service_client_mock.bucket.return_value
+
+        container_client_mock.blob.side_effect = [mock_blob1, mock_blob2]
+        # cloud_interface = AzureCloudInterface(
+        #     "https://storageaccount.blob.core.windows.net/container/path/to/blob"
+        # )
+        cloud_interface = GoogleCloudInterface(
+            "https://console.cloud.google.com/storage/browser/barman-test/path/to/object/"
+        )
+        # container_client = container_client_mock.from_connection_string.return_value
+
+        mock_keys = ["path/to/object/1", "path/to/object/2"]
+        cloud_interface.delete_objects(mock_keys)
+
+        mock_blob1.delete.assert_called_once()
+        mock_blob2.delete.assert_called_once()
+        self.assertEqual(2, container_client_mock.blob.call_count)
+        mock_calls = list(map(lambda x: call(x), mock_keys))
+        container_client_mock.blob.assert_has_calls(mock_calls, any_order=True)
+        # container_client.delete_blobs.assert_called_once_with(*mock_keys)
+
+
 
 
 class TestGetCloudInterface(object):
