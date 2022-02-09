@@ -23,7 +23,6 @@ import os
 import shutil
 import sys
 from argparse import Namespace
-import sys
 from io import BytesIO
 from tarfile import TarFile, TarInfo
 from tarfile import open as open_tar
@@ -35,8 +34,10 @@ import mock
 from mock.mock import MagicMock
 import pytest
 import snappy
+
+if sys.version_info.major > 2:
+    from unittest.mock import patch as unittest_patch
 from unittest import TestCase
-from unittest.mock import call
 from boto3.exceptions import Boto3Error
 from botocore.exceptions import ClientError, EndpointConnectionError
 
@@ -2138,7 +2139,6 @@ class TestGoogleCloudInterface(TestCase):
         container_client_mock.blob.assert_called_once_with(mock_key)
         mock_blob.upload_from_file.assert_called_once_with(mock_body)
 
-
     # @mock.patch.dict(
     #     os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "connection_string"}
     # )
@@ -2282,13 +2282,8 @@ class TestGoogleCloudInterface(TestCase):
     #     )
     #     blob_client_mock.delete_blob.assert_called_once_with()
 
-    # @mock.patch.dict(
-    #     os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "connection_string"}
-    # )
     @mock.patch("barman.cloud_providers.google_cloud_storage.storage.Client")
     def test_delete_objects(self, gcs_client_mock):
-
-
         mock_blob1 = mock.MagicMock()
         mock_blob2 = mock.MagicMock()
 
@@ -2296,25 +2291,71 @@ class TestGoogleCloudInterface(TestCase):
         container_client_mock = service_client_mock.bucket.return_value
 
         container_client_mock.blob.side_effect = [mock_blob1, mock_blob2]
-        # cloud_interface = AzureCloudInterface(
-        #     "https://storageaccount.blob.core.windows.net/container/path/to/blob"
-        # )
         cloud_interface = GoogleCloudInterface(
             "https://console.cloud.google.com/storage/browser/barman-test/path/to/object/"
         )
-        # container_client = container_client_mock.from_connection_string.return_value
-
         mock_keys = ["path/to/object/1", "path/to/object/2"]
         cloud_interface.delete_objects(mock_keys)
 
         mock_blob1.delete.assert_called_once()
         mock_blob2.delete.assert_called_once()
         self.assertEqual(2, container_client_mock.blob.call_count)
-        mock_calls = list(map(lambda x: call(x), mock_keys))
+        mock_calls = list(map(lambda x: mock.call(x), mock_keys))
         container_client_mock.blob.assert_has_calls(mock_calls, any_order=True)
-        # container_client.delete_blobs.assert_called_once_with(*mock_keys)
 
+    @pytest.mark.skipif(sys.version_info < (3, 0), reason="Requires Python 3 or higher")
+    @mock.patch("barman.cloud_providers.google_cloud_storage.open")
+    @mock.patch("barman.cloud_providers.google_cloud_storage.storage")
+    def test_download_file(self, gcs_storage_mock, open_mock):
+        test_cases = {
+            "no_compression": {
+                "compression": None,
+            },
+            "bzip2_compression": {
+                "compression": "bzip2",
+            },
+            "gzip_compression": {
+                "compression": "gzip",
+            },
+            "snappy_compression": {
+                "compression": "snappy",
+            },
+        }
+        for test_name, test_case in test_cases.items():
+            with self.subTest(msg=test_name, compression=test_case["compression"]):
+                with unittest_patch(
+                    "barman.cloud_providers.google_cloud_storage.decompress_to_file"
+                ) as decompress_to_file_mock:
+                    opened_dest_file = open_mock().__enter__.return_value
+                    storage_client_mock = gcs_storage_mock.Client()
+                    blob_mock = gcs_storage_mock.Blob()
+                    blob_mock.exists.return_value = True
 
+                    """Verifies that cloud_interface.download_file decompresses correctly."""
+                    # AND is returned by a cloud interface
+                    object_key = "/arbitrary/object/key"
+                    cloud_interface = GoogleCloudInterface(
+                        "https://console.cloud.google.com/storage/browser/barman-test/path/to/object/"
+                    )
+
+                    # WHEN the file is downloaded from the cloud interface
+                    if test_case["compression"] is None:
+                        # Just verify the download_blob_to_file method was called because
+                        cloud_interface.download_file(object_key, "/tmp/local", None)
+                        storage_client_mock.download_blob_to_file.assert_called_once()
+                        storage_client_mock.download_blob_to_file.assert_called_with(
+                            blob_mock, opened_dest_file
+                        )
+                    else:
+                        cloud_interface.download_file(
+                            object_key, "/tmp/local", test_case["compression"]
+                        )
+                        assert decompress_to_file_mock.call_count
+                        decompress_to_file_mock.assert_called_with(
+                            blob_mock.open().__enter__(),
+                            opened_dest_file,
+                            test_case["compression"],
+                        )
 
 
 class TestGetCloudInterface(object):

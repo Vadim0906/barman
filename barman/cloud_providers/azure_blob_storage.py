@@ -22,7 +22,12 @@ import requests
 from io import BytesIO, RawIOBase, SEEK_END
 
 from barman.clients.cloud_compression import decompress_to_file
-from barman.cloud import CloudInterface, CloudProviderError, DecompressingStreamingIO, DEFAULT_DELIMITER
+from barman.cloud import (
+    CloudInterface,
+    CloudProviderError,
+    DecompressingStreamingIO,
+    DEFAULT_DELIMITER,
+)
 
 try:
     # Python 3.x

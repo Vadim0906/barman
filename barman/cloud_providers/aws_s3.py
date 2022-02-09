@@ -21,7 +21,12 @@ import shutil
 from io import RawIOBase
 
 from barman.clients.cloud_compression import decompress_to_file
-from barman.cloud import CloudInterface, CloudProviderError, DecompressingStreamingIO, DEFAULT_DELIMITER
+from barman.cloud import (
+    CloudInterface,
+    CloudProviderError,
+    DecompressingStreamingIO,
+    DEFAULT_DELIMITER,
+)
 
 
 try:

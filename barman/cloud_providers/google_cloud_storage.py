@@ -16,15 +16,11 @@
 # You should have received a copy of the GNU General Public License
 # along with Barman.  If not, see <http://www.gnu.org/licenses/>
 
-import bz2
-import gzip
 import logging
-import re
 import os
-import shutil
-from io import BytesIO, RawIOBase
 
-from barman.cloud import CloudInterface, DEFAULT_DELIMITER
+from barman.clients.cloud_compression import decompress_to_file
+from barman.cloud import CloudInterface, DecompressingStreamingIO, DEFAULT_DELIMITER
 
 try:
     # Python 3.x
@@ -35,7 +31,7 @@ except ImportError:
 
 try:
     from google.cloud import storage
-    from google.api_core.exceptions import GoogleAPIError
+    from google.api_core.exceptions import GoogleAPIError, Conflict
 except ImportError:
     raise SystemExit("Missing required python module: google-cloud-storage")
 
@@ -57,7 +53,9 @@ class GoogleCloudInterface(CloudInterface):
     # MAX_ARCHIVE_SIZE - so we set a maximum of 1TB per file
     MAX_ARCHIVE_SIZE = 1 << 40
 
-    def __init__(self, url, jobs=1, encryption_scope=None, profile_name=None, tags=None):
+    def __init__(
+        self, url, jobs=1, encryption_scope=None, profile_name=None, tags=None
+    ):
         """
         Create a new Google cloud Storage interface given the supplied account url
 
@@ -150,7 +148,12 @@ class GoogleCloudInterface(CloudInterface):
         #  * access control
         #  Detailed documentation: https://googleapis.dev/python/storage/latest/client.html
         # Might be relevant to use configuration file for those parameters.
-        self.client.create_bucket(self.container_client)
+        try:
+            self.client.create_bucket(self.container_client)
+        except Conflict as e:
+            logging.error("It seems there was a Conflict creating bucket.")
+            logging.error(e.message)
+            logging.error("The bucket already exist, so we continue.")
 
     def list_bucket(self, prefix="", delimiter=DEFAULT_DELIMITER):
         """
@@ -171,7 +174,6 @@ class GoogleCloudInterface(CloudInterface):
         logging.debug("dirs {}".format(dirs))
         return objects + dirs
 
-    # @abstractmethod
     def download_file(self, key, dest_path, decompress):
         """
         Download a file from cloud storage
@@ -180,23 +182,35 @@ class GoogleCloudInterface(CloudInterface):
         :param str dest_path: Where to put the destination file
         :param bool decompress: Whenever to decompress this file or not
         """
-        pass
+        logging.debug("GCS.download_file")
+        blob = storage.Blob(key, self.container_client)
+        with open(dest_path, "wb") as dest_file:
+            if not decompress:
+                self.client.download_blob_to_file(blob, dest_file)
+                return
+            with blob.open(mode="rb") as blob_reader:
+                decompress_to_file(blob_reader, dest_file, decompress)
 
-    # @abstractmethod
-    def remote_open(self, key):
+    def remote_open(self, key, decompressor=None):
         """
         Open a remote object in cloud storage and returns a readable stream
 
         :param str key: The key identifying the object to open
-        :return: A file-like object from which the stream can be read or None if
-          the key does not exist
+        :param barman.clients.cloud_compression.ChunkedCompressor decompressor:
+          A ChunkedCompressor object which will be used to decompress chunks of bytes
+          as they are read from the stream
+        :return: google.cloud.storage.fileio.BlobReader | DecompressingStreamingIO | None A file-like object from which
+          the stream can be read or None if the key does not exist
         """
-        blob = self.container_client.get_blob(key)
-        if blob is None:
+        logging.debug("GCS.remote_open")
+        blob = storage.Blob(key, self.container_client)
+        if not blob.exists():
             logging.debug("Key: {} does not exist".format(key))
             return None
-        # todo: maybe open with rb ?
-        return blob.open("r")
+        blob_reader = blob.open("rb")
+        if decompressor:
+            return DecompressingStreamingIO(blob_reader, decompressor)
+        return blob_reader
 
     def upload_fileobj(self, fileobj, key, override_tags=None):
         """
@@ -215,13 +229,12 @@ class GoogleCloudInterface(CloudInterface):
         logging.info("blob initiated")
         try:
             blob.upload_from_file(fileobj)
-        except Exception as e:
+        except GoogleAPIError as e:
+            logging.info("got an error!!!!")
             logging.error(type(e))
-            logging.error(e.__dict__)
-            logging.error(e.with_traceback())
+            logging.error(e.message)
             raise e
 
-    # @abstractmethod
     def create_multipart_upload(self, key):
         """
         Create a new multipart upload and return any metadata returned by the
@@ -250,7 +263,6 @@ class GoogleCloudInterface(CloudInterface):
         logging.info("Create_multipart_upload")
         return []
 
-    # @abstractmethod
     def _upload_part(self, upload_metadata, key, body, part_number):
         """
         Upload a part into this multipart upload and return a dict of part
@@ -269,9 +281,11 @@ class GoogleCloudInterface(CloudInterface):
         :return: The part metadata
         :rtype: dict[str, None|str]
         """
+        # There is no concurrent upload in rest
+        # only resumable media and simple upload available.
         logging.info("_upload_part")
         # https://googleapis.dev/python/google-resumable-media/latest/resumable_media/requests.html#multipart-uploads
-        # this one manages splitting
+        # This one manages splitting but needs compatibility credentials and uses boto3 client
 
         # blob = self.container_client.blob(key)
         # blob_writer = blob.open("rb")
@@ -281,7 +295,6 @@ class GoogleCloudInterface(CloudInterface):
             "PartNumber": part_number,
         }
 
-    # @abstractmethod
     def _complete_multipart_upload(self, upload_metadata, key, parts_metadata):
         """
         Finish a certain multipart upload
@@ -298,7 +311,6 @@ class GoogleCloudInterface(CloudInterface):
         logging.info("_complete_multipart_upload")
         pass
 
-    # @abstractmethod
     def _abort_multipart_upload(self, upload_metadata, key):
         """
         Abort a certain multipart upload
@@ -312,10 +324,13 @@ class GoogleCloudInterface(CloudInterface):
         """
         # Probably delete things here in case it has already been uploaded ?
         # Maybe catch some exceptions like file not found (equivalent)
-        self.delete_objects(key)
-        pass
+        try:
+            self.delete_objects(key)
+        except GoogleAPIError as e:
+            logging.info("got an error!!!! while _abort_multipart_upload")
+            logging.error(type(e))
+            logging.error(e.message)
 
-    # @abstractmethod
     def delete_objects(self, paths):
         """
         Delete the objects at the specified paths
@@ -331,5 +346,6 @@ class GoogleCloudInterface(CloudInterface):
                 failures[path] = e
 
         if failures:
+            logging.error(failures)
             raise RuntimeError("blabla")
         pass
