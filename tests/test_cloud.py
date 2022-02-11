@@ -2341,14 +2341,14 @@ class TestGoogleCloudInterface(TestCase):
                     # WHEN the file is downloaded from the cloud interface
                     if test_case["compression"] is None:
                         # Just verify the download_blob_to_file method was called because
-                        cloud_interface.download_file(object_key, "/tmp/local", None)
+                        cloud_interface.download_file(object_key, "/some/fake/path", None)
                         storage_client_mock.download_blob_to_file.assert_called_once()
                         storage_client_mock.download_blob_to_file.assert_called_with(
                             blob_mock, opened_dest_file
                         )
                     else:
                         cloud_interface.download_file(
-                            object_key, "/tmp/local", test_case["compression"]
+                            object_key, "/some/fake/path", test_case["compression"]
                         )
                         assert decompress_to_file_mock.call_count
                         decompress_to_file_mock.assert_called_with(
