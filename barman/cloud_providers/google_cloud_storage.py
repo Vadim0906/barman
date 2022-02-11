@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# © Copyright EnterpriseDB UK Limited 2018-2021
+# © Copyright EnterpriseDB UK Limited 2018-2022
 #
 # This file is part of Barman.
 #
@@ -14,7 +14,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with Barman.  If not, see <http://www.gnu.org/licenses/>
+# along with Barman.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
 import os
