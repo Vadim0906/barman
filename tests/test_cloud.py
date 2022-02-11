@@ -2341,7 +2341,9 @@ class TestGoogleCloudInterface(TestCase):
                     # WHEN the file is downloaded from the cloud interface
                     if test_case["compression"] is None:
                         # Just verify the download_blob_to_file method was called because
-                        cloud_interface.download_file(object_key, "/some/fake/path", None)
+                        cloud_interface.download_file(
+                            object_key, "/some/fake/path", None
+                        )
                         storage_client_mock.download_blob_to_file.assert_called_once()
                         storage_client_mock.download_blob_to_file.assert_called_with(
                             blob_mock, opened_dest_file
@@ -2370,6 +2372,10 @@ class TestGetCloudInterface(object):
     @pytest.fixture()
     def mock_config_azure(self):
         return Namespace(credential=None, source_url="test-url")
+
+    @pytest.fixture()
+    def mock_config_gcs(self):
+        return Namespace(source_url="test-url")
 
     def test_unsupported_provider(self, mock_config_aws):
         """Verify an exception is raised for unsupported cloud providers"""
@@ -2448,6 +2454,25 @@ class TestGetCloudInterface(object):
             mock_azure_cloud_interface.call_args_list[0][1]["credential"],
             expected_credential,
         )
+
+    @pytest.mark.parametrize(
+        "extra_args",
+        [
+            {},
+            {"jobs": 1},
+            {"tags": [("foo", "bar"), ("baz", "qux")]},
+        ],
+    )
+    @mock.patch("barman.cloud_providers.google_cloud_storage.GoogleCloudInterface")
+    def test_google_cloud_storage(
+        self, mock_gcs_cloud_interface, mock_config_gcs, extra_args
+    ):
+        """Verify --cloud-provider=google-cloud-storage creates a GoogleCloudInterface"""
+        mock_config_gcs.cloud_provider = "google-cloud-storage"
+        for k, v in extra_args.items():
+            setattr(mock_config_gcs, k, v)
+        get_cloud_interface(mock_config_gcs)
+        mock_gcs_cloud_interface.assert_called_once_with(url="test-url", **extra_args)
 
 
 class TestCloudBackupCatalog(object):

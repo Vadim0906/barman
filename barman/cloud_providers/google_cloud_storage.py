@@ -40,41 +40,44 @@ BASE_URL = "https://console.cloud.google.com/storage/browser/"
 
 
 class GoogleCloudInterface(CloudInterface):
-    # https://cloud.google.com/storage/docs/xml-api/put-object-multipart?hl=en
+    """
+    This class implements CloudInterface for GCS with the scope of using JSON API
+
+    storage client documentation:  https://googleapis.dev/python/storage/latest/client.html
+    JSON API documentation: https://cloud.google.com/storage/docs/json_api/v1/objects
+    """
+
+    # This implementation uses JSON API . does not support real parallel upload.
+    # <<Within the JSON API, there is an unrelated type of upload also called a "multipart upload".>>
     MAX_CHUNKS_PER_FILE = 1
 
-    # https://github.com/googleapis/python-storage/blob/main/google/cloud/storage/blob.py#L3759
-    # chunk_size for writes must be exactly a multiple of 256KiB as with
-    # other resumable uploads. The default is 40 MiB.
+    # Since there is only on chunk  min size is teh same as max archive size
     MIN_CHUNK_SIZE = 1 << 40
 
-    # Azure Blob Storage permit a maximum of 4.75TB per file
+    # https://cloud.google.com/storage/docs/json_api/v1/objects/insert
+    # Google json api  permit a maximum of 5TB per file
     # This is a hard limit, while our upload procedure can go over the specified
     # MAX_ARCHIVE_SIZE - so we set a maximum of 1TB per file
     MAX_ARCHIVE_SIZE = 1 << 40
 
-    def __init__(
-        self, url, jobs=1, encryption_scope=None, profile_name=None, tags=None
-    ):
+    def __init__(self, url, jobs=1, encryption_scope=None, tags=None):
         """
         Create a new Google cloud Storage interface given the supplied account url
 
         :param str url: Full URL of the cloud destination/source (ex: )
         :param int jobs: How many sub-processes to use for asynchronous
           uploading, defaults to 1.
-        :param str encryption_scope: Todo: Not sure we need this unless user wants to use its own encryption key
+        :param str encryption_scope: Todo: Not implemented yet it seems to be used as header (cf X-Goog-Encryption-Key)
+        :param List[tuple] tags: List of tags as k,v tuples to be added to all
+          uploaded objects
         """
         self.bucket_name, self.path = self._parse_url(url)
-
         super(GoogleCloudInterface, self).__init__(
             url=url,
             jobs=jobs,
             tags=tags,
         )
         self.encryption_scope = encryption_scope
-
-        self.profile_name = profile_name
-
         self.bucket_exists = None
         self._reinit_session()
 
@@ -103,15 +106,11 @@ class GoogleCloudInterface(CloudInterface):
     def _reinit_session(self):
         """
         Create a new session
-        Creates a client using "GOOGLE_APPLICATION_CREDENTIALS" env
+        Creates a client using "GOOGLE_APPLICATION_CREDENTIALS" env.
+        An error will be raised if the variable is missing.
         """
-        # os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = '/Users/didier.michel/Downloads/barman-324718-e759c283753d.json'
         self.client = storage.Client()
         self.container_client = self.client.bucket(self.bucket_name)
-
-        # # todo clean duplicate
-        # session = boto3.Session(profile_name=self.profile_name)
-        # self.s3 = session.resource("s3", endpoint_url=self.endpoint_url)
 
     def test_connectivity(self):
         """
@@ -121,7 +120,6 @@ class GoogleCloudInterface(CloudInterface):
             # We are not even interested in the existence of the bucket,
             # we just want to see if google cloud storage is reachable.
             self.bucket_exists = self._check_bucket_existence()
-
             return True
         except GoogleAPIError as exc:
             logging.error("Can't connect to cloud provider: %s", exc)
@@ -139,15 +137,14 @@ class GoogleCloudInterface(CloudInterface):
     def _create_bucket(self):
         """
         Create the bucket in cloud storage
+        It will try to create the bucket according to credential provided with 'GOOGLE_APPLICATION_CREDENTIALS' env. This imply the
+        Bucket creation requires following gcsBucket access: 'storage.buckets.create'. Storage Admin role is suited for that.
+
+        It is advised to have the bucket already created. Bucket creation can use a lot of parameters (region, project, dataclass, access control ...).
+        Barman cloud does not provide a way to customise this creation and will use only bucket for creation .
+        You can check detailed documentation here to learn more about default values
+        https://googleapis.dev/python/storage/latest/client.html -> create_bucket
         """
-        # Todo
-        #  There are several parameters to manage (
-        #  * project id ()
-        #  * data location (default US multi-region)
-        #  * data storage class (default standard)
-        #  * access control
-        #  Detailed documentation: https://googleapis.dev/python/storage/latest/client.html
-        # Might be relevant to use configuration file for those parameters.
         try:
             self.client.create_bucket(self.container_client)
         except Conflict as e:
@@ -237,38 +234,27 @@ class GoogleCloudInterface(CloudInterface):
 
     def create_multipart_upload(self, key):
         """
-        Create a new multipart upload and return any metadata returned by the
-        cloud provider.
+        JSON API does not allow this kind of multipart.
+        https://cloud.google.com/storage/docs/uploads-downloads#uploads
+        Closest solution is Parallel composite uploads. It is implemented in gsutil.
+        It basically behave as follow:
+            * file to upload is split in chunks
+            * each chunk is sent to a specific path
+            * when all chunks ar uploaded, compose call will assemble them into one file
+            * chunk files can then be deleted
 
-        This metadata is treated as an opaque blob by CloudInterface and will
-        be passed into the _upload_part, _complete_multipart_upload and
-        _abort_multipart_upload methods.
-
-        The implementations of these methods will need to handle this metadata in
-        the way expected by the cloud provider.
-
-        Some cloud services do not require multipart uploads to be explicitly
-        created. In such cases the implementation can be a no-op which just
-        returns None.
+        For now parallel upload is a simple upload.
 
         :param key: The key to use in the cloud service
         :return: The multipart upload metadata
         :rtype: dict[str, str]|None
         """
-
-        # # todo: duplicate
-        # return self.s3.meta.client.create_multipart_upload(
-        #     Bucket=self.bucket_name, Key=key, **self._extra_upload_args
-        # )
         logging.info("Create_multipart_upload")
         return []
 
     def _upload_part(self, upload_metadata, key, body, part_number):
         """
-        Upload a part into this multipart upload and return a dict of part
-        metadata. The part metadata must contain the key "PartNumber" and can
-        optionally contain any other metadata available (for example the ETag
-        returned by S3).
+        Upload a file
 
         The part metadata will included in a list of metadata for all parts of
         the upload which is passed to the _complete_multipart_upload method.
@@ -281,16 +267,7 @@ class GoogleCloudInterface(CloudInterface):
         :return: The part metadata
         :rtype: dict[str, None|str]
         """
-        # There is no concurrent upload in rest
-        # only resumable media and simple upload available.
-        logging.info("_upload_part")
-        # https://googleapis.dev/python/google-resumable-media/latest/resumable_media/requests.html#multipart-uploads
-        # This one manages splitting but needs compatibility credentials and uses boto3 client
-
-        # blob = self.container_client.blob(key)
-        # blob_writer = blob.open("rb")
         self.upload_fileobj(body, key)
-        logging.info("_upload_part_done")
         return {
             "PartNumber": part_number,
         }
@@ -298,6 +275,7 @@ class GoogleCloudInterface(CloudInterface):
     def _complete_multipart_upload(self, upload_metadata, key, parts_metadata):
         """
         Finish a certain multipart upload
+        There is nothing to do here as we are not using multipart.
 
         :param dict upload_metadata: Provider-specific metadata for this upload
           e.g. the multipart upload handle in AWS S3
@@ -307,9 +285,7 @@ class GoogleCloudInterface(CloudInterface):
           PartNumber and may optionally contain additional metadata returned by
           the cloud provider such as ETags.
         """
-        # Nothing to do here
         logging.info("_complete_multipart_upload")
-        pass
 
     def _abort_multipart_upload(self, upload_metadata, key):
         """
@@ -334,7 +310,7 @@ class GoogleCloudInterface(CloudInterface):
     def delete_objects(self, paths):
         """
         Delete the objects at the specified paths
-
+        There is no multiple delete in JSON API, so we loop over each object and delete them all.
         :param List[str] paths:
         """
         failures = {}
@@ -347,5 +323,5 @@ class GoogleCloudInterface(CloudInterface):
 
         if failures:
             logging.error(failures)
-            raise RuntimeError("blabla")
+            raise RuntimeError("Could not delete all keys")
         pass
