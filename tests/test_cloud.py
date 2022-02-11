@@ -22,6 +22,7 @@ import gzip
 import os
 import shutil
 import sys
+import unittest
 from argparse import Namespace
 from io import BytesIO
 from tarfile import TarFile, TarInfo
@@ -59,7 +60,7 @@ from barman.cloud_providers.aws_s3 import S3CloudInterface
 from barman.cloud_providers.azure_blob_storage import AzureCloudInterface
 from barman.cloud_providers.google_cloud_storage import GoogleCloudInterface
 
-from google.api_core.exceptions import GoogleAPIError
+from google.api_core.exceptions import GoogleAPIError, Conflict
 
 try:
     from queue import Queue
@@ -1749,6 +1750,7 @@ class TestAzureCloudInterface(object):
 
 
 class TestGoogleCloudInterface(TestCase):
+    # class TestGoogleCloudInterface(object):
     """
     Tests which verify backend-specific behaviour of GoogleCloudInterface.
     """
@@ -1847,6 +1849,7 @@ class TestGoogleCloudInterface(TestCase):
 
         for test_name, test in tests.items():
             with self.subTest(test_name):
+                # with unittest.TestCase.subTest(test_name):
                 cloud_interface = GoogleCloudInterface(test["url"])
                 assert cloud_interface.bucket_name == test["expected-bucket-name"]
                 assert cloud_interface.path == test["expected-path"]
@@ -2001,8 +2004,32 @@ class TestGoogleCloudInterface(TestCase):
         container_client_mock.exists.assert_called_once_with()
         service_client_mock.create_bucket.assert_called_once_with(container_client_mock)
 
+    @mock.patch("barman.cloud_providers.google_cloud_storage.storage.Client")
+    def test_setup_bucket_create_conflict_error(self, gcs_client_mock):
+        """
+        Test auto-creation of a bucket if it not exists but exist error when creating bucket.
+        This doesn't seem logical, but it can happen when quickly deleting a bucket and object, recreating it
+        and testing existence just after.
+        Encountered in barman-testing suite 080 if I recall well.
+        """
+        container_client_mock = mock.Mock()
+        container_client_mock.exists.return_value = False
+
+        service_client_mock = gcs_client_mock.return_value
+        service_client_mock.bucket.return_value = container_client_mock
+        service_client_mock.create_bucket.raiseError.side_effect = Conflict(
+            "Bucket already exist"
+        )
+        cloud_interface = GoogleCloudInterface(
+            "https://console.cloud.google.com/storage/browser/barman-testss/test/path/to/my/"
+        )
+        cloud_interface.setup_bucket()
+        container_client_mock.exists.assert_called_once_with()
+
+        service_client_mock.create_bucket.assert_called_once_with(container_client_mock)
+
     @pytest.mark.skipif(
-        sys.version_info < (3, 5), reason="requires python3.6 or higher"
+        sys.version_info < (3, 5), reason="requires python3.5 or higher"
     )
     @mock.patch("barman.cloud_providers.google_cloud_storage.storage.Client")
     def test_list_bucket(self, gcs_client_mock):
@@ -2066,26 +2093,77 @@ class TestGoogleCloudInterface(TestCase):
                 )
                 assert content == test_case["expected"]
 
-    @mock.patch("barman.cloud_providers.google_cloud_storage.storage.Client")
-    def test_upload_fileobj(self, gcs_client_mock):
-        """Test container client upload_blob is called with expected args"""
-        mock_fileobj = mock.MagicMock()
-        mock_key = "path/to/blob"
+    # @mock.patch("barman.cloud_providers.google_cloud_storage.storage.Client")
+    # def test_upload_fileobj(self, gcs_client_mock):
+    #     """Test container client upload_blob is called with expected args"""
+    #     mock_fileobj = mock.MagicMock()
+    #     mock_key = "path/to/blob"
+    #
+    #     mock_blob = mock.MagicMock()
+    #
+    #     service_client_mock = gcs_client_mock.return_value
+    #     container_client_mock = service_client_mock.bucket.return_value
+    #     container_client_mock.blob.return_value = mock_blob
+    #     # Create Object and call upload_filobj
+    #     cloud_interface = GoogleCloudInterface(
+    #         "https://console.cloud.google.com/storage/browser/barman-test/test/path/to/my/"
+    #     )
+    #     cloud_interface.upload_fileobj(mock_fileobj, mock_key)
+    #
+    #     # Validate behavior
+    #     container_client_mock.blob.assert_called_once_with(mock_key)
+    #     mock_blob.upload_from_file.assert_called_once_with(mock_fileobj)
 
-        mock_blob = mock.MagicMock()
+    @pytest.mark.skipif(
+        sys.version_info < (3, 5), reason="requires python3.5 or higher"
+    )
+    def test_upload_fileobj_with(self):
+        """
+        Tests the tags argument is provided to the container client when uploading
+        a file if tags are provided when creating AzureCloudInterface.
+        """
+        test_cases = {
+            "No tag": {
+                "cloud_interface_tags": None,
+                "override_tags": None,
+                "expected_tags": None,
+            },
+            "Cloud interface tags are used if no override tags": {
+                "cloud_interface_tags": [("foo", "bar"), ("baz $%", "qux -/")],
+                "override_tags": None,
+                "expected_tags": {"foo": "bar", "baz $%": "qux -/"},
+            },
+            "Override tags are used in place of cloud interface tags": {
+                "cloud_interface_tags": [("foo", "bar")],
+                "override_tags": [("$+ a", "///"), ("()", "[]")],
+                "expected_tags": {"$+ a": "///", "()": "[]"},
+            },
+        }
+        for test_name, test in test_cases.items():
+            with self.subTest(name=test_name):
+                with unittest_patch(
+                    "barman.cloud_providers.google_cloud_storage.storage.Client"
+                ) as gcs_client_mock:
+                    mock_fileobj = mock.MagicMock()
+                    mock_blob = mock.MagicMock()
 
-        service_client_mock = gcs_client_mock.return_value
-        container_client_mock = service_client_mock.bucket.return_value
-        container_client_mock.blob.return_value = mock_blob
-        # Create Object and call upload_filobj
-        cloud_interface = GoogleCloudInterface(
-            "https://console.cloud.google.com/storage/browser/barman-test/test/path/to/my/"
-        )
-        cloud_interface.upload_fileobj(mock_fileobj, mock_key)
-
-        # Validate behavior
-        container_client_mock.blob.assert_called_once_with(mock_key)
-        mock_blob.upload_from_file.assert_called_once_with(mock_fileobj)
+                    service_client_mock = gcs_client_mock.return_value
+                    container_client_mock = service_client_mock.bucket.return_value
+                    container_client_mock.blob.return_value = mock_blob
+                    # Init metadata to none for no tag case
+                    mock_blob.metadata = None
+                    cloud_interface = GoogleCloudInterface(
+                        "https://console.cloud.google.com/storage/browser/barman-test/test/path/to/my/",
+                        tags=test["cloud_interface_tags"],
+                    )
+                    mock_key = "path/to/blob"
+                    cloud_interface.upload_fileobj(
+                        mock_fileobj, mock_key, override_tags=test["override_tags"]
+                    )
+                    # Validate behavior
+                    assert mock_blob.metadata == test["expected_tags"]
+                    container_client_mock.blob.assert_called_once_with(mock_key)
+                    mock_blob.upload_from_file.assert_called_once_with(mock_fileobj)
 
     # @mock.patch.dict(
     #     os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "connection_string"}
@@ -2111,10 +2189,6 @@ class TestGoogleCloudInterface(TestCase):
     #         encryption_scope=encryption_scope,
     #     )
 
-    # @mock.patch.dict(
-    #     os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "connection_string"}
-    # )
-    # @mock.patch("barman.cloud_providers.azure_blob_storage.BlobServiceClient")
     @mock.patch("barman.cloud_providers.google_cloud_storage.storage.Client")
     def test_upload_part(self, gcs_client_mock):
         """
@@ -2303,7 +2377,9 @@ class TestGoogleCloudInterface(TestCase):
         mock_calls = list(map(lambda x: mock.call(x), mock_keys))
         container_client_mock.blob.assert_has_calls(mock_calls, any_order=True)
 
-    @pytest.mark.skipif(sys.version_info < (3, 0), reason="Requires Python 3 or higher")
+    @pytest.mark.skipif(
+        sys.version_info < (3, 5), reason="Requires Python 3.5 or higher"
+    )
     @mock.patch("barman.cloud_providers.google_cloud_storage.open")
     @mock.patch("barman.cloud_providers.google_cloud_storage.storage")
     def test_download_file(self, gcs_storage_mock, open_mock):
