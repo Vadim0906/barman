@@ -1752,6 +1752,7 @@ class TestGoogleCloudInterface(TestCase):
     """
     Tests which verify backend-specific behaviour of GoogleCloudInterface.
     """
+
     @pytest.mark.skipif(
         sys.version_info < (3, 5), reason="requires python3.6 or higher"
     )
