@@ -2241,6 +2241,44 @@ class TestGoogleCloudInterface(TestCase):
         mock_calls = list(map(lambda x: mock.call(x), mock_keys))
         container_client_mock.blob.assert_has_calls(mock_calls, any_order=True)
 
+    @mock.patch("barman.cloud_providers.google_cloud_storage.logging")
+    @mock.patch("barman.cloud_providers.google_cloud_storage.storage.Client")
+    def test_delete_objects_with_error(self, gcs_client_mock, logging_mock):
+        mock_blob1 = mock.MagicMock()
+        mock_blob1.delete.side_effect = GoogleAPIError("Failed delete blob1")
+        mock_blob2 = mock.MagicMock()
+        print("blob1", mock_blob1)
+        print("blob2", mock_blob2)
+
+        service_client_mock = gcs_client_mock.return_value
+        container_client_mock = service_client_mock.bucket.return_value
+
+        container_client_mock.blob.side_effect = {
+            "path/to/object/1": mock_blob1,
+            "path/to/object/2": mock_blob2,
+        }.get
+        cloud_interface = GoogleCloudInterface(
+            "https://console.cloud.google.com/storage/browser/barman-test/path/to/object/"
+        )
+        mock_keys = ["path/to/object/1", "path/to/object/2"]
+        with pytest.raises(RuntimeError):
+            cloud_interface.delete_objects(mock_keys)
+
+        logging_mock.error.assert_called_with(
+            {
+                "path/to/object/1": [
+                    "<class 'google.api_core.exceptions.GoogleAPIError'>",
+                    "Failed delete blob1",
+                ]
+            }
+        )
+        mock_blob1.delete.assert_called_once()
+        mock_blob2.delete.assert_called_once()
+        print(container_client_mock.blob.call_count)
+        self.assertEqual(2, container_client_mock.blob.call_count)
+        mock_calls = list(map(lambda x: mock.call(x), mock_keys))
+        container_client_mock.blob.assert_has_calls(mock_calls, any_order=True)
+
     @pytest.mark.skipif(
         sys.version_info < (3, 5), reason="Requires Python 3.5 or higher"
     )

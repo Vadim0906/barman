@@ -227,9 +227,8 @@ class GoogleCloudInterface(CloudInterface):
         try:
             blob.upload_from_file(fileobj)
         except GoogleAPIError as e:
-            logging.info("got an error!!!!")
             logging.error(type(e))
-            logging.error(e.message)
+            logging.error(e)
             raise e
 
     def create_multipart_upload(self, key):
@@ -303,9 +302,8 @@ class GoogleCloudInterface(CloudInterface):
         try:
             self.delete_objects(key)
         except GoogleAPIError as e:
-            logging.info("got an error!!!! while _abort_multipart_upload")
-            logging.error(type(e))
-            logging.error(e.message)
+            logging.error(e)
+            raise e
 
     def delete_objects(self, paths):
         """
@@ -319,7 +317,7 @@ class GoogleCloudInterface(CloudInterface):
                 blob = self.container_client.blob(path)
                 blob.delete()
             except GoogleAPIError as e:
-                failures[path] = e
+                failures[path] = [str(e.__class__), e.__str__()]
 
         if failures:
             logging.error(failures)
