@@ -22,7 +22,6 @@ import gzip
 import os
 import shutil
 import sys
-import unittest
 from argparse import Namespace
 from io import BytesIO
 from tarfile import TarFile, TarInfo
@@ -1750,84 +1749,9 @@ class TestAzureCloudInterface(object):
 
 
 class TestGoogleCloudInterface(TestCase):
-    # class TestGoogleCloudInterface(object):
     """
     Tests which verify backend-specific behaviour of GoogleCloudInterface.
     """
-
-    # @mock.patch.dict(
-    #     os.environ,
-    #     {
-    #         "AZURE_STORAGE_CONNECTION_STRING": "connection_string",
-    #         "AZURE_STORAGE_SAS_TOKEN": "sas_token",
-    #         "AZURE_STORAGE_KEY": "storage_key",
-    #     },
-    # )
-    # @mock.patch("barman.cloud_providers.azure_blob_storage.BlobServiceClient")
-    # def test_uploader_minimal(self, blob_service_mock):
-    #     """Connection string auth takes precedence over SAS token or shared token"""
-    #     container_name = "container"
-    #     account_url = "https://storageaccount.blob.core.windows.net"
-    #     cloud_interface = AzureCloudInterface(
-    #         url="%s/%s/path/to/dir" % (account_url, container_name)
-    #     )
-    #
-    #     assert cloud_interface.bucket_name == "container"
-    #     assert cloud_interface.path == "path/to/dir"
-    #     blob_service_mock.from_connection_string.assert_called_once_with(
-    #         conn_str=os.environ["AZURE_STORAGE_CONNECTION_STRING"],
-    #         container_name=container_name,
-    #     )
-    #     get_container_client_mock = (
-    #         blob_service_mock.from_connection_string.return_value.get_container_client
-    #     )
-    #     get_container_client_mock.assert_called_once_with(container_name)
-    #     assert (
-    #         cloud_interface.container_client == get_container_client_mock.return_value
-    #     )
-
-    # @mock.patch.dict(
-    #     os.environ,
-    #     {"AZURE_STORAGE_SAS_TOKEN": "sas_token", "AZURE_STORAGE_KEY": "storage_key"},
-    # )
-    # @mock.patch("barman.cloud_providers.azure_blob_storage.BlobServiceClient")
-    # def test_uploader_sas_token_auth(self, blob_service_mock):
-    #     """SAS token takes precedence over shared token"""
-    #     container_name = "container"
-    #     account_url = "storageaccount.blob.core.windows.net"
-    #     cloud_interface = AzureCloudInterface(
-    #         url="https://%s/%s/path/to/dir" % (account_url, container_name)
-    #     )
-    #
-    #     assert cloud_interface.bucket_name == "container"
-    #     assert cloud_interface.path == "path/to/dir"
-    #     blob_service_mock.assert_called_once_with(
-    #         account_url=account_url,
-    #         credential=os.environ["AZURE_STORAGE_SAS_TOKEN"],
-    #         container_name=container_name,
-    #     )
-
-    # @mock.patch.dict(
-    #     os.environ,
-    #     {"AZURE_STORAGE_KEY": "storage_key"},
-    # )
-    # @mock.patch("barman.cloud_providers.azure_blob_storage.BlobServiceClient")
-    # def test_uploader_shared_token_auth(self, blob_service_mock):
-    #     """Shared token is used if SAS token and connection string aren't set"""
-    #     container_name = "container"
-    #     account_url = "storageaccount.blob.core.windows.net"
-    #     cloud_interface = AzureCloudInterface(
-    #         url="https://%s/%s/path/to/dir" % (account_url, container_name)
-    #     )
-    #
-    #     assert cloud_interface.bucket_name == "container"
-    #     assert cloud_interface.path == "path/to/dir"
-    #     blob_service_mock.assert_called_once_with(
-    #         account_url=account_url,
-    #         credential=os.environ["AZURE_STORAGE_KEY"],
-    #         container_name=container_name,
-    #     )
-
     @pytest.mark.skipif(
         sys.version_info < (3, 5), reason="requires python3.6 or higher"
     )
@@ -1849,50 +1773,10 @@ class TestGoogleCloudInterface(TestCase):
 
         for test_name, test in tests.items():
             with self.subTest(test_name):
-                # with unittest.TestCase.subTest(test_name):
                 cloud_interface = GoogleCloudInterface(test["url"])
                 assert cloud_interface.bucket_name == test["expected-bucket-name"]
                 assert cloud_interface.path == test["expected-path"]
         self.assertEqual(gcs_client_mock.call_count, 2)
-
-    # @mock.patch.dict(
-    #     os.environ,
-    #     {
-    #         "AZURE_STORAGE_CONNECTION_STRING": "connection_string",
-    #     },
-    # )
-    # @mock.patch("barman.cloud_providers.azure_blob_storage.BlobServiceClient")
-    # def test_emulated_storage(self, blob_service_mock):
-    #     """Connection string auth and emulated storage URL are valid"""
-    #     container_name = "container"
-    #     account_url = "https://127.0.0.1/devstoreaccount1"
-    #     cloud_interface = AzureCloudInterface(
-    #         url="%s/%s/path/to/dir" % (account_url, container_name)
-    #     )
-    #
-    #     assert cloud_interface.bucket_name == "container"
-    #     assert cloud_interface.path == "path/to/dir"
-    #     blob_service_mock.from_connection_string.assert_called_once_with(
-    #         conn_str=os.environ["AZURE_STORAGE_CONNECTION_STRING"],
-    #         container_name=container_name,
-    #     )
-
-    # # Test emulated storage fails if no URL
-    # @mock.patch.dict(
-    #     os.environ,
-    #     {"AZURE_STORAGE_SAS_TOKEN": "sas_token", "AZURE_STORAGE_KEY": "storage_key"},
-    # )
-    # @mock.patch("barman.cloud_providers.azure_blob_storage.BlobServiceClient")
-    # def test_emulated_storage_no_connection_string(self, blob_service_mock):
-    #     """Emulated storage URL with no connection string fails"""
-    #     container_name = "container"
-    #     account_url = "https://127.0.0.1/devstoreaccount1"
-    #     with pytest.raises(ValueError) as exc:
-    #         AzureCloudInterface(url="%s/%s/path/to/dir" % (account_url, container_name))
-    #     assert (
-    #         str(exc.value)
-    #         == "A connection string must be provided when using emulated storage"
-    #     )
 
     @pytest.mark.skipif(
         sys.version_info < (3, 5), reason="requires python3.6 or higher"
@@ -2004,8 +1888,9 @@ class TestGoogleCloudInterface(TestCase):
         container_client_mock.exists.assert_called_once_with()
         service_client_mock.create_bucket.assert_called_once_with(container_client_mock)
 
+    @mock.patch("barman.cloud_providers.google_cloud_storage.logging")
     @mock.patch("barman.cloud_providers.google_cloud_storage.storage.Client")
-    def test_setup_bucket_create_conflict_error(self, gcs_client_mock):
+    def test_setup_bucket_create_conflict_error(self, gcs_client_mock, logging_mock):
         """
         Test auto-creation of a bucket if it not exists but exist error when creating bucket.
         This doesn't seem logical, but it can happen when quickly deleting a bucket and object, recreating it
@@ -2017,9 +1902,7 @@ class TestGoogleCloudInterface(TestCase):
 
         service_client_mock = gcs_client_mock.return_value
         service_client_mock.bucket.return_value = container_client_mock
-        service_client_mock.create_bucket.raiseError.side_effect = Conflict(
-            "Bucket already exist"
-        )
+        service_client_mock.create_bucket.side_effect = Conflict("Bucket already exist")
         cloud_interface = GoogleCloudInterface(
             "https://console.cloud.google.com/storage/browser/barman-testss/test/path/to/my/"
         )
@@ -2027,6 +1910,7 @@ class TestGoogleCloudInterface(TestCase):
         container_client_mock.exists.assert_called_once_with()
 
         service_client_mock.create_bucket.assert_called_once_with(container_client_mock)
+        logging_mock.error.assert_called()
 
     @pytest.mark.skipif(
         sys.version_info < (3, 5), reason="requires python3.5 or higher"
@@ -2092,27 +1976,6 @@ class TestGoogleCloudInterface(TestCase):
                     test_case["prefix"], delimiter=delimiter
                 )
                 assert content == test_case["expected"]
-
-    # @mock.patch("barman.cloud_providers.google_cloud_storage.storage.Client")
-    # def test_upload_fileobj(self, gcs_client_mock):
-    #     """Test container client upload_blob is called with expected args"""
-    #     mock_fileobj = mock.MagicMock()
-    #     mock_key = "path/to/blob"
-    #
-    #     mock_blob = mock.MagicMock()
-    #
-    #     service_client_mock = gcs_client_mock.return_value
-    #     container_client_mock = service_client_mock.bucket.return_value
-    #     container_client_mock.blob.return_value = mock_blob
-    #     # Create Object and call upload_filobj
-    #     cloud_interface = GoogleCloudInterface(
-    #         "https://console.cloud.google.com/storage/browser/barman-test/test/path/to/my/"
-    #     )
-    #     cloud_interface.upload_fileobj(mock_fileobj, mock_key)
-    #
-    #     # Validate behavior
-    #     container_client_mock.blob.assert_called_once_with(mock_key)
-    #     mock_blob.upload_from_file.assert_called_once_with(mock_fileobj)
 
     @pytest.mark.skipif(
         sys.version_info < (3, 5), reason="requires python3.5 or higher"

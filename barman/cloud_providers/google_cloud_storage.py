@@ -324,4 +324,3 @@ class GoogleCloudInterface(CloudInterface):
         if failures:
             logging.error(failures)
             raise RuntimeError("Could not delete all keys")
-        pass
