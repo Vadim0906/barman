@@ -60,14 +60,13 @@ class GoogleCloudInterface(CloudInterface):
     # MAX_ARCHIVE_SIZE - so we set a maximum of 1TB per file
     MAX_ARCHIVE_SIZE = 1 << 40
 
-    def __init__(self, url, jobs=1, encryption_scope=None, tags=None):
+    def __init__(self, url, jobs=1, tags=None):
         """
         Create a new Google cloud Storage interface given the supplied account url
 
         :param str url: Full URL of the cloud destination/source (ex: )
         :param int jobs: How many sub-processes to use for asynchronous
           uploading, defaults to 1.
-        :param str encryption_scope: Todo: Not implemented yet it seems to be used as header (cf X-Goog-Encryption-Key)
         :param List[tuple] tags: List of tags as k,v tuples to be added to all
           uploaded objects
         """
@@ -77,7 +76,6 @@ class GoogleCloudInterface(CloudInterface):
             jobs=jobs,
             tags=tags,
         )
-        self.encryption_scope = encryption_scope
         self.bucket_exists = None
         self._reinit_session()
 
@@ -148,9 +146,9 @@ class GoogleCloudInterface(CloudInterface):
         try:
             self.client.create_bucket(self.container_client)
         except Conflict as e:
-            logging.error("It seems there was a Conflict creating bucket.")
-            logging.error(e.message)
-            logging.error("The bucket already exist, so we continue.")
+            logging.warning("It seems there was a Conflict creating bucket.")
+            logging.warning(e.message)
+            logging.warning("The bucket already exist, so we continue.")
 
     def list_bucket(self, prefix="", delimiter=DEFAULT_DELIMITER):
         """
@@ -182,7 +180,7 @@ class GoogleCloudInterface(CloudInterface):
         logging.debug("GCS.download_file")
         blob = storage.Blob(key, self.container_client)
         with open(dest_path, "wb") as dest_file:
-            if not decompress:
+            if decompress is None:
                 self.client.download_blob_to_file(blob, dest_file)
                 return
             with blob.open(mode="rb") as blob_reader:
@@ -219,11 +217,11 @@ class GoogleCloudInterface(CloudInterface):
           uploaded object
         """
         tags = override_tags or self.tags
-        logging.info("upload_fileobj to {}".format(key))
+        logging.debug("upload_fileobj to {}".format(key))
         blob = self.container_client.blob(key)
         if tags is not None:
             blob.metadata = dict(tags)
-        logging.info("blob initiated")
+        logging.debug("blob initiated")
         try:
             blob.upload_from_file(fileobj)
         except GoogleAPIError as e:
@@ -248,7 +246,6 @@ class GoogleCloudInterface(CloudInterface):
         :return: The multipart upload metadata
         :rtype: dict[str, str]|None
         """
-        logging.info("Create_multipart_upload")
         return []
 
     def _upload_part(self, upload_metadata, key, body, part_number):
@@ -284,7 +281,7 @@ class GoogleCloudInterface(CloudInterface):
           PartNumber and may optionally contain additional metadata returned by
           the cloud provider such as ETags.
         """
-        logging.info("_complete_multipart_upload")
+        pass
 
     def _abort_multipart_upload(self, upload_metadata, key):
         """

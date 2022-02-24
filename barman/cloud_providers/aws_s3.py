@@ -242,7 +242,7 @@ class S3CloudInterface(CloudInterface):
 
         :param str key: The S3 key to download
         :param str dest_path: Where to put the destination file
-        :param bool decompress: Whenever to decompress this file or not
+        :param str|None decompress: Compression scheme to use for decompression
         """
         # Open the remote file
         obj = self.s3.Object(self.bucket_name, key)

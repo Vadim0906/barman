@@ -100,6 +100,7 @@ def _make_google_cloud_interface(config, cloud_interface_kwargs):
     """
     from barman.cloud_providers.google_cloud_storage import GoogleCloudInterface
 
+    cloud_interface_kwargs["jobs"] = 1
     return GoogleCloudInterface(**cloud_interface_kwargs)
 
 

@@ -1043,7 +1043,7 @@ class CloudInterface(with_metaclass(ABCMeta)):
 
         :param str key: The key identifying the file to download
         :param str dest_path: Where to put the destination file
-        :param bool decompress: Whenever to decompress this file or not
+        :param str|None decompress: Compression scheme to use for decompression
         """
 
     @abstractmethod

@@ -1911,7 +1911,7 @@ class TestGoogleCloudInterface(TestCase):
         container_client_mock.exists.assert_called_once_with()
 
         service_client_mock.create_bucket.assert_called_once_with(container_client_mock)
-        logging_mock.error.assert_called()
+        logging_mock.warning.assert_called()
 
     @pytest.mark.skipif(
         sys.version_info < (3, 5), reason="requires python3.5 or higher"
@@ -2029,30 +2029,6 @@ class TestGoogleCloudInterface(TestCase):
                     container_client_mock.blob.assert_called_once_with(mock_key)
                     mock_blob.upload_from_file.assert_called_once_with(mock_fileobj)
 
-    # @mock.patch.dict(
-    #     os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "connection_string"}
-    # )
-    # @mock.patch("barman.cloud_providers.azure_blob_storage.ContainerClient")
-    # def test_upload_fileobj_with_encryption_scope(self, ContainerClientMock):
-    #     """Test encrption scope is passed to upload_blob"""
-    #     encryption_scope = "test_encryption_scope"
-    #     cloud_interface = AzureCloudInterface(
-    #         "https://storageaccount.blob.core.windows.net/container/path/to/blob",
-    #         encryption_scope=encryption_scope,
-    #     )
-    #     container_client = ContainerClientMock.from_connection_string.return_value
-    #     mock_fileobj = mock.MagicMock()
-    #     mock_key = "path/to/blob"
-    #     cloud_interface.upload_fileobj(mock_fileobj, mock_key)
-    #     # The key and fileobj are passed on to the upload_blob call along
-    #     # with the encryption_scope
-    #     container_client.upload_blob.assert_called_once_with(
-    #         name=mock_key,
-    #         data=mock_fileobj,
-    #         overwrite=True,
-    #         encryption_scope=encryption_scope,
-    #     )
-
     @mock.patch("barman.cloud_providers.google_cloud_storage.storage.Client")
     def test_upload_part(self, gcs_client_mock):
         """
@@ -2076,149 +2052,6 @@ class TestGoogleCloudInterface(TestCase):
         # Validate behavior
         container_client_mock.blob.assert_called_once_with(mock_key)
         mock_blob.upload_from_file.assert_called_once_with(mock_body)
-
-    # @mock.patch.dict(
-    #     os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "connection_string"}
-    # )
-    # @mock.patch("barman.cloud_providers.azure_blob_storage.BlobServiceClient")
-    # def test_upload_part_with_encryption_scope(self, blob_service_mock):
-    #     """
-    #     Tests that the encryption scope is passed to the blob client when
-    #     uploading a single block
-    #     """
-    #     encryption_scope = "test_encryption_scope"
-    #     cloud_interface = AzureCloudInterface(
-    #         "https://storageaccount.blob.core.windows.net/container/path/to/blob",
-    #         encryption_scope=encryption_scope,
-    #     )
-    #     blob_service_client_mock = blob_service_mock.from_connection_string.return_value
-    #     container_client_mock = (
-    #         blob_service_client_mock.get_container_client.return_value
-    #     )
-    #     blob_client_mock = container_client_mock.get_blob_client.return_value
-    #
-    #     mock_body = mock.MagicMock()
-    #     mock_key = "path/to/blob"
-    #     cloud_interface._upload_part({}, mock_key, mock_body, 1)
-    #
-    #     # A blob client is created for the key and stage_block is called with
-    #     # the mock_body and a block_id generated from the part number and the
-    #     # encryption scope
-    #     container_client_mock.get_blob_client.assert_called_once_with(mock_key)
-    #     blob_client_mock.stage_block.assert_called_once_with(
-    #         "00001", mock_body, encryption_scope=encryption_scope
-    #     )
-
-    # @mock.patch.dict(
-    #     os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "connection_string"}
-    # )
-    # @mock.patch("barman.cloud_providers.azure_blob_storage.BlobServiceClient")
-    # def test_complete_multipart_upload(self, blob_service_mock):
-    #     """Tests completion of a block blob upload in Azure Blob Storage"""
-    #     cloud_interface = GoogleCloudInterface(
-    #         "https://storageaccount.blob.core.windows.net/container/path/to/blob"
-    #     )
-    #     blob_service_client_mock = blob_service_mock.from_connection_string.return_value
-    #     container_client_mock = (
-    #         blob_service_client_mock.get_container_client.return_value
-    #     )
-    #     blob_client_mock = container_client_mock.get_blob_client.return_value
-    #
-    #     mock_parts = [{"PartNumber": "00001"}]
-    #     mock_key = "path/to/blob"
-    #     cloud_interface._complete_multipart_upload({}, mock_key, mock_parts)
-    #
-    #     # A blob client is created for the key and commit_block_list is called
-    #     # with the supplied list of part numbers
-    #     container_client_mock.get_blob_client.assert_called_once_with(mock_key)
-    #     blob_client_mock.commit_block_list.assert_called_once_with(["00001"])
-
-    # @mock.patch.dict(
-    #     os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "connection_string"}
-    # )
-    # @mock.patch("barman.cloud_providers.azure_blob_storage.BlobServiceClient")
-    # def test_complete_multipart_upload_with_encryption_scope(self, blob_service_mock):
-    #     """
-    #     Tests the completion of a block blob upload in Azure Blob Storage and that
-    #     the encryption scope is passed to the blob client
-    #     """
-    #     encryption_scope = "test_encryption_scope"
-    #     cloud_interface = AzureCloudInterface(
-    #         "https://storageaccount.blob.core.windows.net/container/path/to/blob",
-    #         encryption_scope=encryption_scope,
-    #     )
-    #     blob_service_client_mock = blob_service_mock.from_connection_string.return_value
-    #     container_client_mock = (
-    #         blob_service_client_mock.get_container_client.return_value
-    #     )
-    #     blob_client_mock = container_client_mock.get_blob_client.return_value
-    #
-    #     mock_parts = [{"PartNumber": "00001"}]
-    #     mock_key = "path/to/blob"
-    #     cloud_interface._complete_multipart_upload({}, mock_key, mock_parts)
-    #
-    #     # A blob client is created for the key and commit_block_list is called
-    #     # with the supplied list of part numbers and the encryption scope
-    #     container_client_mock.get_blob_client.assert_called_once_with(mock_key)
-    #     blob_client_mock.commit_block_list.assert_called_once_with(
-    #         ["00001"], encryption_scope=encryption_scope
-    #     )
-
-    # @mock.patch.dict(
-    #     os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "connection_string"}
-    # )
-    # @mock.patch("barman.cloud_providers.azure_blob_storage.BlobServiceClient")
-    # def test_abort_multipart_upload(self, blob_service_mock):
-    #     """Test aborting a block blob upload in Azure Blob Storage"""
-    #     cloud_interface = AzureCloudInterface(
-    #         "https://storageaccount.blob.core.windows.net/container/path/to/blob"
-    #     )
-    #     blob_service_client_mock = blob_service_mock.from_connection_string.return_value
-    #     container_client_mock = (
-    #         blob_service_client_mock.get_container_client.return_value
-    #     )
-    #     blob_client_mock = container_client_mock.get_blob_client.return_value
-    #
-    #     mock_key = "path/to/blob"
-    #     cloud_interface._abort_multipart_upload({}, mock_key)
-    #
-    #     # A blob client is created for the key and commit_block_list is called
-    #     # with an empty list, followed by delete_blob with no args
-    #     container_client_mock.get_blob_client.assert_called_once_with(mock_key)
-    #     blob_client_mock.commit_block_list.assert_called_once_with([])
-    #     blob_client_mock.delete_blob.assert_called_once_with()
-
-    # @mock.patch.dict(
-    #     os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "connection_string"}
-    # )
-    # @mock.patch("barman.cloud_providers.azure_blob_storage.BlobServiceClient")
-    # def test_abort_multipart_upload_with_encryption_scope(self, blob_service_mock):
-    #     """
-    #     Test aborting a block blob upload in Azure Blob Storage and verify that the
-    #     encryption scope is passed to the blob client
-    #     """
-    #     encryption_scope = "test_encryption_scope"
-    #     cloud_interface = AzureCloudInterface(
-    #         "https://storageaccount.blob.core.windows.net/container/path/to/blob",
-    #         encryption_scope=encryption_scope,
-    #     )
-    #     blob_service_client_mock = blob_service_mock.from_connection_string.return_value
-    #     container_client_mock = (
-    #         blob_service_client_mock.get_container_client.return_value
-    #     )
-    #     blob_client_mock = container_client_mock.get_blob_client.return_value
-    #
-    #     mock_key = "path/to/blob"
-    #     cloud_interface._abort_multipart_upload({}, mock_key)
-    #
-    #     # A blob client is created for the key and commit_block_list is called
-    #     # with an empty list and the encryption scope, followed by delete_blob
-    #     # with no args
-    #     container_client_mock.get_blob_client.assert_called_once_with(mock_key)
-    #     blob_client_mock.commit_block_list.assert_called_once_with(
-    #         [], encryption_scope=encryption_scope
-    #     )
-    #     blob_client_mock.delete_blob.assert_called_once_with()
 
     @mock.patch("barman.cloud_providers.google_cloud_storage.storage.Client")
     def test_delete_objects(self, gcs_client_mock):
@@ -2437,7 +2270,7 @@ class TestGetCloudInterface(object):
         "extra_args",
         [
             {},
-            {"jobs": 1},
+            {"jobs": 2},
             {"tags": [("foo", "bar"), ("baz", "qux")]},
         ],
     )
@@ -2450,6 +2283,8 @@ class TestGetCloudInterface(object):
         for k, v in extra_args.items():
             setattr(mock_config_gcs, k, v)
         get_cloud_interface(mock_config_gcs)
+        # No matter what, jobs parameter will be set to 1
+        extra_args["jobs"] = 1
         mock_gcs_cloud_interface.assert_called_once_with(url="test-url", **extra_args)
 
 
